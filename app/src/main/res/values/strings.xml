@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">Android Samba TestApp</string>
+
+    <!--Fills-->
+    <string name="workgroup">workgroup</string>
+    <string name="ip">ip</string>
+    <string name="username">username</string>
+    <string name="password">password</string>
+    <string name="sharedfolder">SharedFolder</string>
+    <string name="filename">FileName</string>
+    <string name="savedata">Remember data</string>
+
+    <!--Buttons-->
+    <string name="download">Download</string>
+    <string name="test">Test</string>
+    <string name="upload">Upload</string>
+
+    <!--Popup-->
+    <string name="loading">Loading</string>
+    <string name="wait">Please wait…</string>
+</resources>
