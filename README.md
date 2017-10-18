@@ -11,3 +11,5 @@ If you press the test button the app will return true if the connexion was succe
 if you press the upload button the app will return true if the file exist in the server otherwise returns false
 if you press the download button the app will return true if the file exist in the device otherwise returns false
 if connection fails returns the exception
+
+By default the app search the specified file in the download folder of the device. You can change this value by edit the Utils file in the method getLocalPath()
