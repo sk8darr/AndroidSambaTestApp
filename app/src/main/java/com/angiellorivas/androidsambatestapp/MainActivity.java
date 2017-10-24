@@ -1,6 +1,7 @@
 package com.angiellorivas.androidsambatestapp;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -12,20 +13,38 @@ import android.support.v4.content.Loader;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.AppCompatCheckBox;
 import android.support.v7.widget.AppCompatEditText;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.Toast;
 
+import com.afollestad.materialdialogs.DialogAction;
+import com.afollestad.materialdialogs.GravityEnum;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.afollestad.materialdialogs.Theme;
 import com.angiellorivas.androidsambatestapp.Network.FileLoader;
+
+import net.rdrei.android.dirchooser.DirectoryChooserActivity;
+import net.rdrei.android.dirchooser.DirectoryChooserConfig;
+
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
 
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener, CompoundButton.OnCheckedChangeListener, LoaderManager.LoaderCallbacks<Bundle>{
 
     private final int PERMISSION_REQUEST = 101;
+    private final int PICKFILE_REQUEST_CODE = 102;
     private AppCompatEditText etIp,etUser,etPass,etFilename,etShared,etWg;
     private MaterialDialog mProgressDialog;
+    private MaterialDialog progress;
+    private int fileCounter = 1;
+    private int maxFileCounter = 10;
+    private int actualFileCounter = 0;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +81,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .progress(true, 0)
                 .theme(Theme.LIGHT)
                 .build();
+
+        progress = new MaterialDialog.Builder(this)
+                .title(R.string.loading)
+                .contentGravity(GravityEnum.CENTER)
+                .canceledOnTouchOutside(false)
+                .cancelable(false)
+                .theme(Theme.LIGHT)
+                .progress(false, actualFileCounter, true)
+                .build();
     }
 
     @Override
@@ -82,13 +110,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         bundle.putString("fileName",etFilename.getText().toString());
         switch (view.getId()){
             case R.id.btSend:
-                bundle.putInt("action", 0);
+                bundle.putInt("action", Config.ACTION_TEST);
                 break;
             case R.id.btUpload:
-                bundle.putInt("action", 1);
+                bundle.putInt("action", Config.ACTION_UPLOAD);
                 break;
             case R.id.btDownload:
-                bundle.putInt("action", 2);
+                bundle.putInt("action", Config.ACTION_DOWNLOAD);
                 break;
         }
         if(bundle.containsKey("action")){
@@ -111,6 +139,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void onLoadFinished(Loader<Bundle> loader, Bundle data) {
         Toast.makeText(MainActivity.this, data.getString(FileLoader.KEY_RESULT),Toast.LENGTH_LONG).show();
         dismissProgressDialog();
+        dismissProgressListDialog();
+
     }
 
     @Override
@@ -136,6 +166,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }catch (IllegalArgumentException ex){
                     ex.printStackTrace();
                     mProgressDialog.setCancelable(true);
+                }
+            }
+        });
+    }
+
+    private void dismissProgressListDialog(){
+        Handler handler = new Handler();
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                try{
+                    if(progress != null){
+                        progress.dismiss();
+                    }
+                }catch (IllegalArgumentException ex){
+                    ex.printStackTrace();
+                    progress.setCancelable(true);
                 }
             }
         });
@@ -167,5 +214,87 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             }
         }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.options, menu);
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()){
+            case R.id.default_folder:
+                final Intent chooserIntent = new Intent(this, DirectoryChooserActivity.class);
+
+                final DirectoryChooserConfig config = DirectoryChooserConfig.builder()
+                        .newDirectoryName("DirChooserSample")
+                        .allowReadOnlyDirectory(true)
+                        .allowNewDirectoryNameModification(true)
+                        .build();
+
+                chooserIntent.putExtra(DirectoryChooserActivity.EXTRA_CONFIG, config);
+                // REQUEST_DIRECTORY is a constant integer to identify the request, e.g. 0
+                startActivityForResult(chooserIntent, PICKFILE_REQUEST_CODE);
+                break;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICKFILE_REQUEST_CODE) {
+            if (resultCode == DirectoryChooserActivity.RESULT_CODE_DIR_SELECTED) {
+                String path = (data.getStringExtra(DirectoryChooserActivity.RESULT_SELECTED_DIR));
+                Utils.setLocalPath(this, path);
+            }
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEvent(ServiceEvent.OneFileDownloaded e) {
+        if(mProgressDialog != null)mProgressDialog.dismiss();
+        if(!progress.isShowing())progress.show();
+        if(fileCounter >= actualFileCounter) {
+            fileCounter = 1;
+        } else {
+            fileCounter++;
+            progress.incrementProgress(1);
+            progress.setContent(e.getFilename());
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEvent(ServiceEvent.OneFileUploaded e) {
+        if(mProgressDialog != null)mProgressDialog.dismiss();
+        if(!progress.isShowing())progress.show();
+        if(fileCounter >= actualFileCounter) {
+            fileCounter = 1;
+        } else {
+            fileCounter++;
+            progress.incrementProgress(1);
+            progress.setContent(e.getFilename());
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onEvent(ServiceEvent.TotalFiles e) {
+        actualFileCounter = e.getTotal();
+        progress.setMaxProgress(actualFileCounter);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        EventBus.getDefault().register(this);
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        EventBus.getDefault().unregister(this);
     }
 }

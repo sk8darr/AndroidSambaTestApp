@@ -18,6 +18,7 @@ public class Utils {
     private static final String KEY_PASS = "pass";
     private static final String KEY_FOLDER = "folder";
     private static final String KEY_FILENAME = "filename";
+    private static final String KEY_DEFAULT_PATH = "path";
 
     private static SharedPreferences getSharedPreferences(Context context) {
         return context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
@@ -100,9 +101,15 @@ public class Utils {
         return getSharedPreferences(mContext).getString(KEY_FILENAME, "");
     }
 
+    static void setLocalPath(Context context, String value){
+        SharedPreferences preferences = getSharedPreferences(context);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putString(KEY_DEFAULT_PATH, value);
+        editor.apply();
+    }
 
-
-    public static String getLocalPath(){
-        return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsolutePath();
+    public static String getLocalPath(Context mContext){
+        String defaultPath = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsolutePath();
+        return getSharedPreferences(mContext).getString(KEY_DEFAULT_PATH, defaultPath);
     }
 }

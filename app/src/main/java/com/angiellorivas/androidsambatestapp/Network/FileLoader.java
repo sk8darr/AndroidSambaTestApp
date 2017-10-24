@@ -5,7 +5,11 @@ import android.os.Bundle;
 import android.support.v4.content.AsyncTaskLoader;
 import android.text.TextUtils;
 
+import com.angiellorivas.androidsambatestapp.Config;
+import com.angiellorivas.androidsambatestapp.ServiceEvent;
 import com.angiellorivas.androidsambatestapp.Utils;
+
+import org.greenrobot.eventbus.EventBus;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -13,6 +17,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import jcifs.smb.NtlmPasswordAuthentication;
 import jcifs.smb.SmbFile;
@@ -44,44 +50,53 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
             NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(wg, user, pass);
             SmbFile sFile = null;
             switch (bundle.getInt("action")){
-                case 0:
+                case Config.ACTION_TEST:
                     String url = "smb://"+ip+"/" + sharedFolder + "/" +fileName;
                     if(!TextUtils.isEmpty(user) && !TextUtils.isEmpty(pass)) {
                         sFile = new SmbFile(url, auth);
                     }else{
                         sFile = new SmbFile(url);
                     }
-                    if(sFile.isDirectory()) {
-                        SmbFile[] files = sFile.listFiles();
-                        for(SmbFile smbFile : files){
-                            System.out.println(smbFile.getCanonicalPath());
-                        }
-                    }
                     bundle.putString(KEY_RESULT, String.valueOf(sFile.canRead()));
                     return bundle;
-                case 1:
+                case Config.ACTION_UPLOAD:
                     url = "smb://"+ip+"/" + sharedFolder + "/";
-                    String path = url + fileName;
-                    sFile = new SmbFile(path, auth);
-                    SmbFile sFilePath = new SmbFile(sFile.getParent(), auth);
-                    if (!sFilePath.exists()) sFilePath.mkdirs();
-                    File file = new File(Utils.getLocalPath()+File.separator+fileName);
-                    if(file.exists()) {
-                        BufferedInputStream inBuf = new BufferedInputStream(new FileInputStream(file));
-                        final SmbFileOutputStream smbFileOutputStream = new SmbFileOutputStream(sFile);
-                        final byte[] buf = new byte[16 * 1024 * 1024];
-                        int len;
-                        while ((len = inBuf.read(buf)) > 0) {
-                            smbFileOutputStream.write(buf, 0, len);
-                        }
-                        inBuf.close();
-                        smbFileOutputStream.close();
-                    }else{
-                        throw new IOException();
+                    String path = url;
+                    File filesPath = new File(Utils.getLocalPath(getContext()));
+                    List<File>filesToUpload = new ArrayList<>();
+                    if(TextUtils.isEmpty(fileName)){
+                        filesToUpload = getLocalListFiles(filesPath);
                     }
-                    bundle.putString(KEY_RESULT, String.valueOf(sFile.exists()));
+                    File file = new File(Utils.getLocalPath(getContext()) + File.separator + fileName);
+                    filesToUpload.add(file);
+                    for(File f : filesToUpload) {
+                        if (f.exists()) {
+                            SmbFile sFilePath;
+                            if(!TextUtils.isEmpty(user) && !TextUtils.isEmpty(pass)) {
+                                sFile = new SmbFile(path+f.getName(), auth);
+                                sFilePath = new SmbFile(sFile.getParent(), auth);
+                            }else{
+                                sFile = new SmbFile(path+f.getName());
+                                sFilePath = new SmbFile(sFile.getParent());
+                            }
+                            if (!sFilePath.exists()) sFilePath.mkdirs();
+                            BufferedInputStream inBuf = new BufferedInputStream(new FileInputStream(f));
+                            final SmbFileOutputStream smbFileOutputStream = new SmbFileOutputStream(sFile);
+                            final byte[] buf = new byte[16 * 1024 * 1024];
+                            int len;
+                            while ((len = inBuf.read(buf)) > 0) {
+                                smbFileOutputStream.write(buf, 0, len);
+                            }
+                            inBuf.close();
+                            smbFileOutputStream.close();
+                            EventBus.getDefault().post(new ServiceEvent.OneFileUploaded(f.getName()));
+                        } else {
+                            throw new IOException();
+                        }
+                    }
+                    bundle.putString(KEY_RESULT, String.valueOf(sFile != null && sFile.exists()));
                     return bundle;
-                case 2:
+                case Config.ACTION_DOWNLOAD:
                     url = "smb://"+ip+"/" + sharedFolder + "/" +fileName;
                     if(!TextUtils.isEmpty(user) && !TextUtils.isEmpty(pass)) {
                         sFile = new SmbFile(url, auth);
@@ -89,9 +104,13 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
                         sFile = new SmbFile(url);
                     }
                     File destFile = new File("");
-                    if(sFile.exists()){
+                    if(TextUtils.isEmpty(fileName)){
+                        if(sFile.isDirectory()) {
+                            destFile = getFolder(sFile);
+                        }
+                    }else if(sFile.exists()){
                         BufferedInputStream inBuf = new BufferedInputStream(sFile.getInputStream());
-                        destFile = new File(Utils.getLocalPath() + File.separator + sFile.getName());
+                        destFile = new File(Utils.getLocalPath(getContext()) + File.separator + sFile.getName());
                         OutputStream out = new FileOutputStream(destFile);
 
                         // Copy the bits from Instream to Outstream
@@ -106,7 +125,6 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
                     bundle.putString(KEY_RESULT, String.valueOf(destFile.exists()));
                     return bundle;
             }
-
         } catch (Exception e) {
             // Output the stack trace.
             e.printStackTrace();
@@ -114,5 +132,53 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
             return bundle;
         }
         return null;
+    }
+
+    private File getFolder(SmbFile folder) throws IOException {
+        File lastFile = null;
+        if(folder.isDirectory()) {
+            SmbFile[] files = folder.listFiles();
+            EventBus.getDefault().post(new ServiceEvent.TotalFiles(files.length));
+            for(SmbFile smbFile : files){
+                lastFile = getFile(smbFile);
+            }
+        }
+        return lastFile;
+    }
+
+    private File getFile(SmbFile smbFile) throws IOException {
+        if(smbFile.exists() && smbFile.isFile()) {
+            BufferedInputStream inBuf = new BufferedInputStream(smbFile.getInputStream());
+            File destFile = new File(Utils.getLocalPath(getContext()) + File.separator + smbFile.getName());
+            OutputStream out = new FileOutputStream(destFile);
+
+            // Copy the bits from Instream to Outstream
+            byte[] buf = new byte[1024];
+            int len;
+            while ((len = inBuf.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+            // Maybe in.close();
+            out.close();
+            EventBus.getDefault().post(new ServiceEvent.OneFileDownloaded(smbFile.getName()));
+            return destFile;
+        }else if(smbFile.exists() && smbFile.isDirectory()){
+            getFolder(smbFile);
+        }
+        return null;
+    }
+
+    private List<File> getLocalListFiles(File parentDir) {
+        ArrayList<File> inFiles = new ArrayList<File>();
+        File[] files = parentDir.listFiles();
+        EventBus.getDefault().post(new ServiceEvent.TotalFiles(files.length));
+        for (File file : files) {
+            if (file.isDirectory()) {
+                inFiles.addAll(getLocalListFiles(file));
+            } else {
+                inFiles.add(file);
+            }
+        }
+        return inFiles;
     }
 }
