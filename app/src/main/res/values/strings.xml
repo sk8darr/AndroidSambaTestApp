@@ -18,6 +18,7 @@
     <!--Popup-->
     <string name="loading">Loading</string>
     <string name="wait">Please wait…</string>
+    <string name="uploading">Uploading</string>
     
     <!--Menu-->
     <string name="default_folder">Default Folder</string>

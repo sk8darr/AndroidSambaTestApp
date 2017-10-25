@@ -2,6 +2,7 @@ package com.angiellorivas.androidsambatestapp.Network;
 
 import android.content.Context;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v4.content.AsyncTaskLoader;
 import android.text.TextUtils;
 
@@ -48,7 +49,7 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
             String sharedFolder= bundle.getString("shared").trim();
             String fileName = bundle.getString("fileName").trim();
             NtlmPasswordAuthentication auth = new NtlmPasswordAuthentication(wg, user, pass);
-            SmbFile sFile = null;
+            SmbFile sFile;
             switch (bundle.getInt("action")){
                 case Config.ACTION_TEST:
                     String url = "smb://"+ip+"/" + sharedFolder + "/" +fileName;
@@ -63,38 +64,7 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
                     url = "smb://"+ip+"/" + sharedFolder + "/";
                     String path = url;
                     File filesPath = new File(Utils.getLocalPath(getContext()));
-                    List<File>filesToUpload = new ArrayList<>();
-                    if(TextUtils.isEmpty(fileName)){
-                        filesToUpload = getLocalListFiles(filesPath);
-                    }
-                    File file = new File(Utils.getLocalPath(getContext()) + File.separator + fileName);
-                    filesToUpload.add(file);
-                    for(File f : filesToUpload) {
-                        if (f.exists()) {
-                            SmbFile sFilePath;
-                            if(!TextUtils.isEmpty(user) && !TextUtils.isEmpty(pass)) {
-                                sFile = new SmbFile(path+f.getName(), auth);
-                                sFilePath = new SmbFile(sFile.getParent(), auth);
-                            }else{
-                                sFile = new SmbFile(path+f.getName());
-                                sFilePath = new SmbFile(sFile.getParent());
-                            }
-                            if (!sFilePath.exists()) sFilePath.mkdirs();
-                            BufferedInputStream inBuf = new BufferedInputStream(new FileInputStream(f));
-                            final SmbFileOutputStream smbFileOutputStream = new SmbFileOutputStream(sFile);
-                            final byte[] buf = new byte[16 * 1024 * 1024];
-                            int len;
-                            while ((len = inBuf.read(buf)) > 0) {
-                                smbFileOutputStream.write(buf, 0, len);
-                            }
-                            inBuf.close();
-                            smbFileOutputStream.close();
-                            EventBus.getDefault().post(new ServiceEvent.OneFileUploaded(f.getName()));
-                        } else {
-                            throw new IOException();
-                        }
-                    }
-                    bundle.putString(KEY_RESULT, String.valueOf(sFile != null && sFile.exists()));
+                    bundle.putString(KEY_RESULT, String.valueOf(uploadFiles(fileName,filesPath,auth,path)));
                     return bundle;
                 case Config.ACTION_DOWNLOAD:
                     url = "smb://"+ip+"/" + sharedFolder + "/" +fileName;
@@ -169,9 +139,8 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
     }
 
     private List<File> getLocalListFiles(File parentDir) {
-        ArrayList<File> inFiles = new ArrayList<File>();
+        ArrayList<File> inFiles = new ArrayList<>();
         File[] files = parentDir.listFiles();
-        EventBus.getDefault().post(new ServiceEvent.TotalFiles(files.length));
         for (File file : files) {
             if (file.isDirectory()) {
                 inFiles.addAll(getLocalListFiles(file));
@@ -179,6 +148,46 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
                 inFiles.add(file);
             }
         }
+        EventBus.getDefault().post(new ServiceEvent.TotalFiles(inFiles.size()));
         return inFiles;
+    }
+
+    private boolean uploadFiles(String fileName, File filesPath, @Nullable NtlmPasswordAuthentication auth, String path) throws IOException {
+        List<File>filesToUpload = new ArrayList<>();
+        if(TextUtils.isEmpty(fileName)){
+            filesToUpload = getLocalListFiles(filesPath);
+        }
+        File file = new File(Utils.getLocalPath(getContext()) + File.separator + fileName);
+        filesToUpload.add(file);
+        SmbFile sFile = null;
+        for(File f : filesToUpload) {
+            if (f.exists() && f.isFile()) {
+                SmbFile sFilePath;
+                if(auth != null) {
+                    sFile = new SmbFile(path+f.getName(), auth);
+                    sFilePath = new SmbFile(sFile.getParent(), auth);
+                }else{
+                    sFile = new SmbFile(path+f.getName());
+                    sFilePath = new SmbFile(sFile.getParent());
+                }
+                if (!sFilePath.exists()) sFilePath.mkdirs();
+                BufferedInputStream inBuf = new BufferedInputStream(new FileInputStream(f));
+                final SmbFileOutputStream smbFileOutputStream = new SmbFileOutputStream(sFile);
+                final byte[] buf = new byte[16 * 1024 * 1024];
+                int len;
+                while ((len = inBuf.read(buf)) > 0) {
+                    smbFileOutputStream.write(buf, 0, len);
+                    smbFileOutputStream.write(buf, 0, len);
+                }
+                inBuf.close();
+                smbFileOutputStream.close();
+                EventBus.getDefault().post(new ServiceEvent.OneFileUploaded(f.getName()));
+            } else if(f.isDirectory()){
+                filesToUpload.addAll(getLocalListFiles(new File(f.getAbsolutePath())));
+            } else {
+                throw new IOException();
+            }
+        }
+        return sFile != null && sFile.exists();
     }
 }

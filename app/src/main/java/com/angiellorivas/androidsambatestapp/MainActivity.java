@@ -83,7 +83,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .build();
 
         progress = new MaterialDialog.Builder(this)
-                .title(R.string.loading)
+                .title(R.string.uploading)
                 .contentGravity(GravityEnum.CENTER)
                 .canceledOnTouchOutside(false)
                 .cancelable(false)
@@ -283,6 +283,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onEvent(ServiceEvent.TotalFiles e) {
         actualFileCounter = e.getTotal();
+        fileCounter = 1;
+        progress.setProgress(fileCounter);
         progress.setMaxProgress(actualFileCounter);
     }
 
