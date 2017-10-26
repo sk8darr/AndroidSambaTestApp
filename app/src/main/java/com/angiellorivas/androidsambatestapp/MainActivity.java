@@ -114,9 +114,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 break;
             case R.id.btUpload:
                 bundle.putInt("action", Config.ACTION_UPLOAD);
+                progress.setTitle(getString(R.string.uploading));
                 break;
             case R.id.btDownload:
                 bundle.putInt("action", Config.ACTION_DOWNLOAD);
+                progress.setTitle(getString(R.string.downloading));
                 break;
         }
         if(bundle.containsKey("action")){

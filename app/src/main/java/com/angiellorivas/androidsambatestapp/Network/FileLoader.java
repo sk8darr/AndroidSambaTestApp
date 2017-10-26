@@ -7,6 +7,7 @@ import android.support.v4.content.AsyncTaskLoader;
 import android.text.TextUtils;
 
 import com.angiellorivas.androidsambatestapp.Config;
+import com.angiellorivas.androidsambatestapp.R;
 import com.angiellorivas.androidsambatestapp.ServiceEvent;
 import com.angiellorivas.androidsambatestapp.Utils;
 
@@ -58,13 +59,13 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
                     }else{
                         sFile = new SmbFile(url);
                     }
-                    bundle.putString(KEY_RESULT, String.valueOf(sFile.canRead()));
+                    bundle.putString(KEY_RESULT, getContext().getString(R.string.canread) + " : " +String.valueOf(sFile.canRead()));
                     return bundle;
                 case Config.ACTION_UPLOAD:
                     url = "smb://"+ip+"/" + sharedFolder + "/";
                     String path = url;
                     File filesPath = new File(Utils.getLocalPath(getContext()));
-                    bundle.putString(KEY_RESULT, String.valueOf(uploadFiles(fileName,filesPath,auth,path)));
+                    bundle.putString(KEY_RESULT, getContext().getString(R.string.uploaded) + " : " +String.valueOf(uploadFiles(fileName,filesPath,auth,path)));
                     return bundle;
                 case Config.ACTION_DOWNLOAD:
                     url = "smb://"+ip+"/" + sharedFolder + "/" +fileName;
@@ -92,7 +93,7 @@ public class FileLoader extends AsyncTaskLoader<Bundle> {
                         // Maybe in.close();
                         out.close();
                     }
-                    bundle.putString(KEY_RESULT, String.valueOf(destFile.exists()));
+                    bundle.putString(KEY_RESULT, getContext().getString(R.string.downloaded) + " : " +String.valueOf(destFile.exists()));
                     return bundle;
             }
         } catch (Exception e) {
